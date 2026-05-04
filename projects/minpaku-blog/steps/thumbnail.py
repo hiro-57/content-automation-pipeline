@@ -55,10 +55,16 @@ def _find_edge() -> Path:
 
 
 def _title_size_class(title: str) -> str:
-    """タイトルの文字数で CSS クラスを決定（自動的にフォントサイズ調整）。"""
-    if len(title) > 40:
+    """タイトルの文字数で CSS クラスを決定（自動的にフォントサイズ調整）。
+
+    切れないギリギリの 1200x630 内 2 行収まり目安:
+      - 〜24 文字  → デフォルト 50px
+      - 25〜32 文字 → long 38px
+      - 33 文字〜  → very-long 30px
+    """
+    if len(title) > 32:
         return "very-long"
-    if len(title) > 28:
+    if len(title) > 24:
         return "long"
     return ""
 

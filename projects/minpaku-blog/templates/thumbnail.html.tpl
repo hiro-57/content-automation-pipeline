@@ -70,15 +70,15 @@ html, body {{
 
 .title-block {{
     position: absolute;
-    bottom: 56px;
+    bottom: 44px;
     left: 50px;
     right: 50px;
     color: white;
 }}
 
 .title {{
-    font-size: 54px;
-    line-height: 1.32;
+    font-size: 50px;
+    line-height: 1.3;
     font-weight: 900;
     text-shadow: 2px 2px 14px rgba(0, 0, 0, 0.65);
     letter-spacing: 0.015em;
@@ -86,12 +86,12 @@ html, body {{
 }}
 
 .title.long {{
-    font-size: 44px;
-    line-height: 1.36;
+    font-size: 38px;
+    line-height: 1.35;
 }}
 
 .title.very-long {{
-    font-size: 38px;
+    font-size: 30px;
     line-height: 1.4;
 }}
 
