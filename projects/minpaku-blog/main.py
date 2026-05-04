@@ -11,7 +11,8 @@ from steps.annotate import annotate_article
 from steps.claude import generate_article
 from steps.evaluate import evaluate_article, format_evaluation_markdown
 from steps.sheets import get_unprocessed_keyword, mark_processed
-from steps.wordpress import create_draft_post, split_title_from_markdown
+from steps.thumbnail import make_thumbnail
+from steps.wordpress import create_draft_post, split_title_from_markdown, upload_media
 
 sys.stdout.reconfigure(encoding="utf-8")
 # override=True: .env を OS の環境変数より優先（空の API key などのシャドー回避）
@@ -68,7 +69,7 @@ def main() -> None:
     print(f"対象: 行 {row} / キーワード '{keyword}'")
 
     # ① 記事生成
-    print("\n[1/5] Claude API で記事生成中...")
+    print("\n[1/6] Claude API で記事生成中...")
     t0 = time.time()
     gen = generate_article(keyword)
     elapsed = time.time() - t0
@@ -86,7 +87,7 @@ def main() -> None:
 
     # ② 評価（web_search で競合分析）
     # 評価が失敗しても WP 投稿は続行する（評価は補助情報・ブロッカーではない）
-    print("\n[2/5] Claude + web_search で評価中...（30〜90秒）")
+    print("\n[2/6] Claude + web_search で評価中...（30〜90秒）")
     eval_path: Path | None = None
     hints: list[str] = []
     try:
@@ -111,7 +112,7 @@ def main() -> None:
 
     # ③ 加筆マーカーを記事に埋め込む（WP 編集時の指針として）
     # マーカー埋め込みが失敗してもクリーン版でWP投稿に進む
-    print(f"\n[3/5] 加筆マーカー埋め込み中（ヒント {len(hints)} 件）...")
+    print(f"\n[3/6] 加筆マーカー埋め込み中（ヒント {len(hints)} 件）...")
     article_for_wp = gen["text"]
     if hints:
         try:
@@ -131,18 +132,45 @@ def main() -> None:
     else:
         print("  ヒントが無いためスキップ（クリーン版を使用）")
 
-    # ④ WordPress に下書き投稿
-    print("\n[4/5] WordPress に下書き投稿中...")
-    title, body = split_title_from_markdown(article_for_wp)
-    if not title:
-        title = keyword
-    print(f"  タイトル: {title}")
-    post = create_draft_post(title=title, body_markdown=body)
+    # 記事のタイトルを抽出（サムネ・WP 投稿で共用）
+    article_title, article_body = split_title_from_markdown(article_for_wp)
+    if not article_title:
+        article_title = keyword
+
+    # ④ サムネイル生成（Flux で背景画像 → HTML+CSS で文字入れ → PNG）
+    # サムネ生成失敗してもアイキャッチ無しで WP 投稿に進む
+    print("\n[4/6] サムネイル生成中...（30〜60秒）")
+    featured_media_id: int | None = None
+    try:
+        t3 = time.time()
+        thumb = make_thumbnail(
+            keyword, article_title, gen["text"], base_name=base_name
+        )
+        elapsed = time.time() - t3
+        print(f"  完了（{elapsed:.1f}秒）")
+        print(f"  サムネ: outputs/{thumb['png_path'].name}")
+        print(f"  WP メディアにアップロード中...")
+        media = upload_media(thumb["png_path"], alt_text=article_title)
+        featured_media_id = media["media_id"]
+        print(f"  WP メディア ID={featured_media_id}")
+    except Exception as exc:
+        print(f"  ⚠ サムネ生成 or アップロード失敗（パイプライン続行）: {exc}")
+
+    # ⑤ WordPress に下書き投稿
+    print("\n[5/6] WordPress に下書き投稿中...")
+    print(f"  タイトル: {article_title}")
+    post = create_draft_post(
+        title=article_title,
+        body_markdown=article_body,
+        featured_media=featured_media_id,
+    )
     print(f"  下書きID={post['post_id']}")
+    if featured_media_id:
+        print(f"  アイキャッチ設定: メディア ID={featured_media_id}")
     print(f"  編集URL: {post['edit_link']}")
 
-    # ⑤ スプレッドシート更新
-    print("\n[5/5] スプレッドシート更新...")
+    # ⑥ スプレッドシート更新
+    print("\n[6/6] スプレッドシート更新...")
     mark_processed(sheet_id, row, article_url=post["link"])
     print(f"  行 {row} → 処理済 / URL記録")
 
