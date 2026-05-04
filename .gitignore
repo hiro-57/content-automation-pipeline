@@ -29,3 +29,8 @@ yarn-error.log*
 *.log
 *.tmp
 tmp/
+
+# API credentials (NEVER commit)
+**/google-credentials.json
+**/credentials/
+*-service-account*.json
