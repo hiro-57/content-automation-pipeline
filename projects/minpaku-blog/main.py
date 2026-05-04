@@ -1,4 +1,3 @@
-import json
 import sys
 
 from dotenv import load_dotenv
@@ -16,8 +15,14 @@ def main() -> None:
 
     result = generate_article(keyword)
 
-    print("--- Dify レスポンス（生データ） ---")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    elapsed = result["elapsed_seconds"]
+    tokens = result["tokens"]
+    steps = result["steps"]
+    print(f"✓ 完了（{elapsed:.1f}秒 / {tokens:,}トークン / {steps}ステップ）")
+    print()
+    print("────── 記事本文 ──────")
+    print(result["text"])
+    print("────── ここまで ──────")
 
 
 if __name__ == "__main__":
