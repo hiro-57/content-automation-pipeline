@@ -163,10 +163,11 @@ def format_evaluation_markdown(evaluation: dict, keyword: str) -> str:
         lines.append("|---|---|")
         labels = {
             "comprehensiveness": "網羅性",
+            "depth": "深さ・具体性",
             "originality": "独自性",
-            "seo": "SEO 最適化",
+            "actionability": "実用性",
             "readability": "読みやすさ",
-            "eeat": "E-E-A-T（実体験・専門性・権威性・信頼性）",
+            "search_intent_fit": "検索意図適合",
         }
         for key, label in labels.items():
             if key in scores:

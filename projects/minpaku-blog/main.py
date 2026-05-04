@@ -36,11 +36,12 @@ def _print_eval_summary(evaluation: dict) -> None:
     print(f"  総合スコア: {score} / 10")
     if scores:
         labels = {
-            "comprehensiveness": "網羅性",
-            "originality": "独自性",
-            "seo": "SEO",
-            "readability": "読みやすさ",
-            "eeat": "E-E-A-T",
+            "comprehensiveness": "網羅",
+            "depth": "深さ",
+            "originality": "独自",
+            "actionability": "実用",
+            "readability": "読み易",
+            "search_intent_fit": "検索意図",
         }
         parts = [f"{labels.get(k, k)}={scores.get(k, '?')}" for k in labels]
         print(f"  内訳: {' / '.join(parts)}")
