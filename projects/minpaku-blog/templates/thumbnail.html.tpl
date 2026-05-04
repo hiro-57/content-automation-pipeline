@@ -70,14 +70,14 @@ html, body {{
 
 .title-block {{
     position: absolute;
-    bottom: 44px;
+    bottom: 80px;
     left: 50px;
     right: 50px;
     color: white;
 }}
 
 .title {{
-    font-size: 50px;
+    font-size: 54px;
     line-height: 1.3;
     font-weight: 900;
     text-shadow: 2px 2px 14px rgba(0, 0, 0, 0.65);
@@ -86,22 +86,22 @@ html, body {{
 }}
 
 .title.long {{
-    font-size: 38px;
+    font-size: 42px;
     line-height: 1.35;
 }}
 
 .title.very-long {{
-    font-size: 30px;
+    font-size: 36px;
     line-height: 1.4;
 }}
 
 .accent-bar {{
-    width: 64px;
-    height: 5px;
+    width: 80px;
+    height: 6px;
     background: #d97706;
-    margin-bottom: 20px;
-    border-radius: 2px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    margin-bottom: 24px;
+    border-radius: 3px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }}
 </style>
 </head>
