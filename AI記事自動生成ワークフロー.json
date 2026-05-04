@@ -1,0 +1,733 @@
+{
+  "name": "AI記事自動生成ワークフロー",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "fd069fbb-ba1c-44bf-8b0c-a6f0f8f09477",
+      "name": "毎日定時実行トリガー",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "notes": "毎日1回実行。時間は依頼者の運用スタイルに合わせて変更してください。"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Nm5iVOYYr-eL-f-iV9XcwvBT-yq7j_sCh60ed1cZY-U",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "シート1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Nm5iVOYYr-eL-f-iV9XcwvBT-yq7j_sCh60ed1cZY-U/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "6e80bb32-5107-4591-8072-51d1fd5bdab5",
+      "name": "Googleシート：未処理KW取得",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        208,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "bZMP0eZLacddSdEg",
+          "name": "Google Sheets OAuth2 API"
+        }
+      },
+      "notes": "【バグ対策】returnFirstMatchをtrueにし1件ずつ処理。一括処理するとDify/WPへの負荷でタイムアウトしやすい。YOUR_GOOGLE_SHEET_IDは依頼者が差し替える。"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.keyword }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "131d8bd5-d6db-4505-8766-eb2977b1708b",
+      "name": "KWが空でないか確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ],
+      "notes": "【バグ対策】キーワードが空白の行を拾ってしまうケースを防ぐ。空ならワークフローをここで停止する。"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dify.ai/v1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": ""
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inputs",
+              "value": "={\n  \"inputs\": {\n    \"keyword\": \"{{ $('Googleシート：未処理KW取得').item.json.keyword }}\"\n  },\n  \"response_mode\": \"blocking\",\n  \"user\": \"n8n-auto\"\n}"
+            },
+            {
+              "name": "response_mode",
+              "value": "blocking"
+            },
+            {
+              "name": "user",
+              "value": "n8n-auto"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "997c3f6a-b3bb-4925-a1cb-c7f6fe2f1be9",
+      "name": "Dify：記事生成API呼び出し",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        608,
+        0
+      ],
+      "notes": "【バグ対策①】タイムアウトを120秒に設定。記事生成は時間がかかるためデフォルト値では必ずタイムアウトする。\n【バグ対策②】YOUR_DIFY_API_KEYは依頼者が差し替える。\n【バグ対策③】response_modeはblockingで同期処理。streamingにするとn8nでのレスポンス処理が複雑になる。"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.answer }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e7e5a924-d6a9-462d-92d1-6f31339895d1",
+      "name": "Difyレスポンス確認",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "notes": "【バグ対策】Difyがエラーを返した場合や空レスポンスの場合にWordPressへの投稿を止める。"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_STABILITY_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text_prompts",
+              "value": "={{ [{\"text\": \"professional blog thumbnail image about \" + $('Googleシート：未処理KW取得').item.json.keyword + \", clean modern design, no text\", \"weight\": 1}] }}"
+            },
+            {
+              "name": "cfg_scale",
+              "value": 7
+            },
+            {
+              "name": "height",
+              "value": 768
+            },
+            {
+              "name": "width",
+              "value": 1344
+            },
+            {
+              "name": "samples",
+              "value": 1
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "0b34ac7e-def5-4f6e-9a6f-d3d844428271",
+      "name": "Stability AI：アイキャッチ画像生成",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        992,
+        -368
+      ],
+      "notes": "【バグ対策①】YOUR_STABILITY_API_KEYは依頼者が差し替える。\n【バグ対策②】画像サイズはWordPressのOGP推奨サイズ（1344x768）に設定済み。\n【バグ対策③】プロンプトに'no text'を入れることで画像内に文字が生成されるのを防ぐ。\n【代替案】Stability AIの代わりにReplicateを使う場合はURLとボディ構造を変更する。"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_WORDPRESS_URL/wp-json/wp/v2/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Disposition",
+              "value": "={{ 'attachment; filename=\"' + $('Googleシート：未処理KW取得').item.json.keyword.replace(/ /g, '_') + '.png\"' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "image/png"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "image_binary",
+        "options": {}
+      },
+      "id": "c9ca82ad-e65e-4b66-93a0-1ccaa6e8c420",
+      "name": "WordPress：画像アップロード",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1184,
+        -224
+      ],
+      "notes": "【バグ対策①】画像はbase64からバイナリに変換してからアップロードする。前段にConvertノードが必要な場合あり。\n【バグ対策②】YOUR_WORDPRESS_URLは依頼者が差し替える。\n【バグ対策③】認証はWordPressのアプリケーションパスワードを使う。通常のパスワードでは動作しない。"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://humdrum-spark.localsite.io/wp-json/wp/v2/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ $('Googleシート：未処理KW取得').item.json.keyword }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $('Dify：記事生成API呼び出し').item.json.answer }}"
+            },
+            {
+              "name": "status",
+              "value": "draft"
+            },
+            {
+              "name": "featured_media",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "00cd8042-9ba4-4ded-bd10-7fb8e20c5679",
+      "name": "WordPress：下書き投稿",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1408,
+        0
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DAVQeOD9czZVSTlG",
+          "name": "Unnamed credential"
+        }
+      },
+      "notes": "【バグ対策①】statusを必ずdraftにする。publishにすると人間の確認なしで公開されてしまう。\n【バグ対策②】featured_mediaに画像IDを紐付け。前のノードから$json.idで取得。\n【バグ対策③】YOUR_WORDPRESS_URLは依頼者が差し替える。"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "処理済",
+            "article_url": "={{ 'YOUR_WORDPRESS_URL/?p=' + $('WordPress：下書き投稿').item.json.id }}",
+            "published_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "keyword"
+          ]
+        },
+        "options": {}
+      },
+      "id": "c691f65d-2b92-4722-9deb-21aaaa346222",
+      "name": "Googleシート：ステータス更新",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1600,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "bZMP0eZLacddSdEg",
+          "name": "Google Sheets OAuth2 API"
+        }
+      },
+      "notes": "【バグ対策】投稿完了後に即座にステータスを処理済に更新。更新前にエラーが起きると同じKWが二重処理されるリスクがある。"
+    },
+    {
+      "parameters": {
+        "path": "bb998653-e004-4592-912d-de08aa15a9d3",
+        "options": {}
+      },
+      "id": "e0f2da32-e2da-40b8-bcd8-09a6c1a16b7d",
+      "name": "WordPress公開検知（Webhook）",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        304
+      ],
+      "webhookId": "bb998653-e004-4592-912d-de08aa15a9d3",
+      "notes": "【バグ対策】このノードは別ワークフローとして独立させる。WordPressにWP Webhooksプラグインを入れ、記事公開時にこのURLにPOSTするよう設定する。"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "id": "7dd0b5f0-1be5-47cb-b052-279c6b607684",
+      "name": "2分待機（X投稿前）",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        208,
+        304
+      ],
+      "webhookId": "9430b4fc-562e-4ce7-9dba-6e4389305fbc",
+      "notes": "SNSアルゴリズム対策として時間差投稿。X→note→はてなの順で間隔を空ける。"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twitter.com/2/tweets",
+        "authentication": "oAuth2",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $('WordPress公開検知（Webhook）').item.json.post_title + '\\n\\n' + $('WordPress公開検知（Webhook）').item.json.post_excerpt + '\\n\\n' + $('WordPress公開検知（Webhook）').item.json.post_url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e37af3d7-ef8e-4c71-b90c-db1a809f5019",
+      "name": "X（Twitter）：自動投稿",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        400,
+        304
+      ],
+      "notes": "【バグ対策・重要】X APIはBasicプラン（月$100）以上が必要。無料プランでは書き込み不可。審査が通らないケースもあるため、依頼者に事前確認必須。\n【代替案】X投稿が使えない場合はこのノードをスキップしてnoteから始める。"
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "minutes"
+      },
+      "id": "0844414a-94f2-47f7-a565-dd9c5e464b56",
+      "name": "5分待機（note投稿前）",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        608,
+        304
+      ],
+      "webhookId": "d8f11978-c685-4953-9974-660a5176bc78",
+      "notes": "X投稿から5分後にnoteへ投稿。時間差でアルゴリズムペナルティを回避する。"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://note.com/api/v1/text_notes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "YOUR_NOTE_SESSION_COOKIE"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $('WordPress公開検知（Webhook）').item.json.post_title }}"
+            },
+            {
+              "name": "body",
+              "value": "={{ $('WordPress公開検知（Webhook）').item.json.post_content + '\\n\\n元記事はこちら：' + $('WordPress公開検知（Webhook）').item.json.post_url }}"
+            },
+            {
+              "name": "status",
+              "value": "published"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4999a733-10d3-4724-ba78-217c250783b1",
+      "name": "note：転載投稿",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        800,
+        304
+      ],
+      "notes": "【バグ対策・重要】noteは公式APIを公開していないため、セッションCookieを使った非公式連携。仕様変更で突然動かなくなるリスクがある。依頼者に事前説明必須。\nYOUR_NOTE_SESSION_COOKIEはnoteにログイン後ブラウザのDevToolsで取得する。"
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "minutes"
+      },
+      "id": "5de6d6d2-aadd-4886-8609-e2c69b8ee003",
+      "name": "10分待機（はてな投稿前）",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        304
+      ],
+      "webhookId": "6b72f2e4-0863-40ba-9df7-2990f6c9caac",
+      "notes": "note投稿から10分後にはてなへ投稿。"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://blog.hatena.ne.jp/YOUR_HATENA_ID/YOUR_HATENA_BLOG/atom/entry",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/xml"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "9e1ca408-9b5f-4e65-a482-fcc876475e4d",
+      "name": "はてなブログ：転載投稿",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1200,
+        304
+      ],
+      "notes": "【バグ対策①】はてなブログはAtomPub APIを使用。XMLフォーマットが必須。\n【バグ対策②】YOUR_HATENA_IDとYOUR_HATENA_BLOGは依頼者が差し替える。\n【バグ対策③】認証ははてなのAPIキーを使用（アカウント設定から取得）。"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.indexnow.org/indexnow",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "host",
+              "value": "YOUR_WORDPRESS_DOMAIN"
+            },
+            {
+              "name": "key",
+              "value": "YOUR_INDEXNOW_API_KEY"
+            },
+            {
+              "name": "keyLocation",
+              "value": "YOUR_WORDPRESS_URL/YOUR_INDEXNOW_API_KEY.txt"
+            },
+            {
+              "name": "urlList",
+              "value": "={{ [$('WordPress公開検知（Webhook）').item.json.post_url] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a85c5b00-4072-4649-80ce-776a166a899e",
+      "name": "IndexNow：Google/Bing即時通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1408,
+        304
+      ],
+      "notes": "【バグ対策①】IndexNowのAPIキーはWordPressのルートディレクトリに{APIキー}.txtファイルを設置する必要がある。\n【バグ対策②】YOUR_INDEXNOW_API_KEYは任意の文字列（UUIDを推奨）。\n【バグ対策③】GoogleはIndexNowに非対応のためBing経由でのインデックス申請になる。Googleへの反映は別途Google Search ConsoleのURL検査から手動で行う。"
+    }
+  ],
+  "pinData": {
+    "Dify：記事生成API呼び出し": [
+      {
+        "json": {
+          "name": "First item",
+          "code": 1
+        }
+      },
+      {
+        "json": {
+          "name": "Second item",
+          "code": 2
+        }
+      }
+    ]
+  },
+  "connections": {
+    "毎日定時実行トリガー": {
+      "main": [
+        [
+          {
+            "node": "Googleシート：未処理KW取得",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Googleシート：未処理KW取得": {
+      "main": [
+        [
+          {
+            "node": "KWが空でないか確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KWが空でないか確認": {
+      "main": [
+        [
+          {
+            "node": "Dify：記事生成API呼び出し",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dify：記事生成API呼び出し": {
+      "main": [
+        [
+          {
+            "node": "Difyレスポンス確認",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Difyレスポンス確認": {
+      "main": [
+        [
+          {
+            "node": "WordPress：下書き投稿",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stability AI：アイキャッチ画像生成": {
+      "main": [
+        []
+      ]
+    },
+    "WordPress：画像アップロード": {
+      "main": [
+        []
+      ]
+    },
+    "WordPress：下書き投稿": {
+      "main": [
+        [
+          {
+            "node": "Googleシート：ステータス更新",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WordPress公開検知（Webhook）": {
+      "main": [
+        [
+          {
+            "node": "2分待機（X投稿前）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2分待機（X投稿前）": {
+      "main": [
+        [
+          {
+            "node": "X（Twitter）：自動投稿",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X（Twitter）：自動投稿": {
+      "main": [
+        [
+          {
+            "node": "5分待機（note投稿前）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5分待機（note投稿前）": {
+      "main": [
+        [
+          {
+            "node": "note：転載投稿",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "note：転載投稿": {
+      "main": [
+        [
+          {
+            "node": "10分待機（はてな投稿前）",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10分待機（はてな投稿前）": {
+      "main": [
+        [
+          {
+            "node": "はてなブログ：転載投稿",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "はてなブログ：転載投稿": {
+      "main": [
+        [
+          {
+            "node": "IndexNow：Google/Bing即時通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "387af482-a177-44cc-92e6-24fb9454b027",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f222cd6d015c9020bb3ec9290126db67885ad8980b52a4863e48c6904e235f6a"
+  },
+  "id": "QggqA2eKAbRp7wGd",
+  "tags": []
+}
