@@ -130,7 +130,12 @@ def render_thumbnail(
     category: str = "民泊運営",
     brand: str = DEFAULT_BRAND,
 ) -> None:
-    """HTML テンプレ + Edge headless で 1200x630 PNG をレンダリング。"""
+    """HTML テンプレ + Edge headless で 1200x630 PNG をレンダリング。
+
+    Edge headless の `--window-size` は内部 chrome 領域分が差し引かれて
+    実ビューポートが小さくなる。少し大きめ (1200x720) でレンダリングして、
+    PIL で 1200x630 にクロップして対応する。
+    """
     template_path = TEMPLATES_DIR / "thumbnail.html.tpl"
     if not template_path.exists():
         raise ThumbnailError(f"テンプレートが見つかりません: {template_path}")
@@ -147,13 +152,16 @@ def render_thumbnail(
     html_path = output_path.with_suffix(".html")
     html_path.write_text(html, encoding="utf-8")
 
+    # 一旦大きめのサイズでスクショ → 1200x630 へクロップ
+    raw_path = output_path.with_name(output_path.stem + ".raw.png")
     edge = _find_edge()
     cmd = [
         str(edge),
         "--headless=new",
         "--disable-gpu",
-        f"--screenshot={output_path}",
-        "--window-size=1200,630",
+        "--force-device-scale-factor=1",
+        f"--screenshot={raw_path}",
+        "--window-size=1200,720",
         "--hide-scrollbars",
         html_path.resolve().as_uri(),
     ]
@@ -163,11 +171,26 @@ def render_thumbnail(
             f"Edge スクリーンショット失敗（exit {result.returncode}）: "
             f"{result.stderr[:300]}"
         )
-    if not output_path.exists():
+    if not raw_path.exists():
         raise ThumbnailError("PNG ファイルが生成されませんでした")
 
+    # PIL で 1200x630 にクロップ
+    try:
+        from PIL import Image  # noqa: PLC0415
+    except ImportError as exc:
+        raise ThumbnailError(
+            "Pillow が必要です: pip install pillow"
+        ) from exc
+
+    with Image.open(raw_path) as img:
+        cropped = img.crop((0, 0, 1200, 630))
+        cropped.save(output_path)
+
+    # 中間ファイルを掃除
     if html_path.exists():
         html_path.unlink()
+    if raw_path.exists():
+        raw_path.unlink()
 
 
 def make_thumbnail(
