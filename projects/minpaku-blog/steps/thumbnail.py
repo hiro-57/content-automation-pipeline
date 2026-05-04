@@ -58,15 +58,65 @@ def _title_size_class(title: str) -> str:
     """タイトルの文字数で CSS クラスを決定（自動的にフォントサイズ調整）。
 
     切れないギリギリの 1200x630 内 2 行収まり目安:
-      - 〜24 文字  → デフォルト 50px
-      - 25〜32 文字 → long 38px
-      - 33 文字〜  → very-long 30px
+      - 〜24 文字  → デフォルト 54px
+      - 25〜32 文字 → long 42px
+      - 33 文字〜  → very-long 36px
     """
     if len(title) > 32:
         return "very-long"
     if len(title) > 24:
         return "long"
     return ""
+
+
+# サイズクラスごとの 1 行最大文字数（折り返し位置判定用）
+_MAX_CHARS_BY_CLASS = {
+    "": 20,            # default 54px → 1100px / 54 ≈ 20
+    "long": 26,        # 42px → 1100 / 42 ≈ 26
+    "very-long": 30,   # 36px → 1100 / 36 ≈ 30
+}
+
+# 改行直後に来てはいけない日本語助詞・接尾辞（「を徹底解説」のように行頭に来ると不自然）
+_PARTICLES_FORBIDDEN_AT_LINE_START = set("をがにでとのはもまでからよりへやかねよわけど")
+
+# この文字の直後で改行すると自然（「青色申告の|メリット」のような切れ目）
+_PREFERRED_BREAK_AFTER = set("｜・、,。 のはでをがにと")
+
+
+def _smart_title_break(title: str, size_class: str) -> str:
+    """日本語タイトルの「美しい改行位置」を計算して <br> を挿入する。
+
+    例:
+      入力: "民泊の確定申告完全ガイド｜申告方法・経費・青色申告のメリットを徹底解説"
+      出力: "民泊の確定申告完全ガイド｜申告方法・経費・青色申告の<br>メリットを徹底解説"
+
+    （ブラウザの自動折り返しに任せると「メリット|を徹底解説」のように
+     行頭に「を」が来る不自然な分割になる場合があるため、明示的に制御する）
+    """
+    max_chars = _MAX_CHARS_BY_CLASS.get(size_class, 20)
+    if len(title) <= max_chars:
+        return title  # 1 行に収まるので何もしない
+
+    half = len(title) // 2
+
+    # フェーズ1: max_chars から逆順にスキャン → 「自然な切れ目」を探す
+    for i in range(max_chars, half - 1, -1):
+        if i <= 0 or i >= len(title):
+            continue
+        prev_char = title[i - 1]
+        curr_char = title[i]
+        if prev_char in _PREFERRED_BREAK_AFTER and curr_char not in _PARTICLES_FORBIDDEN_AT_LINE_START:
+            return title[:i] + "<br>" + title[i:]
+
+    # フェーズ2: 助詞行頭を避けるだけの緩い条件
+    for i in range(max_chars, half - 1, -1):
+        if i <= 0 or i >= len(title):
+            continue
+        if title[i] not in _PARTICLES_FORBIDDEN_AT_LINE_START:
+            return title[:i] + "<br>" + title[i:]
+
+    # フェーズ3: 諦めて max_chars 位置で機械的に分割
+    return title[:max_chars] + "<br>" + title[max_chars:]
 
 
 def generate_image_prompt(keyword: str, title: str, article_md: str) -> str:
@@ -142,12 +192,14 @@ def render_thumbnail(
     template = template_path.read_text(encoding="utf-8")
 
     image_uri = background_path.resolve().as_uri()
+    size_class = _title_size_class(title)
+    title_html = _smart_title_break(title, size_class)
     html = template.format(
         image_path=image_uri,
-        title=title,
+        title=title_html,
         category=category,
         brand=brand,
-        title_size_class=_title_size_class(title),
+        title_size_class=size_class,
     )
     html_path = output_path.with_suffix(".html")
     html_path.write_text(html, encoding="utf-8")
