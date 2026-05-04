@@ -34,3 +34,6 @@ tmp/
 **/google-credentials.json
 **/credentials/
 *-service-account*.json
+
+# Generated article backups (auto-created at runtime, not committed)
+projects/*/outputs/

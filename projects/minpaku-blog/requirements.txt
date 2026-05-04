@@ -3,3 +3,4 @@ python-dotenv>=1.0
 gspread>=6.0
 google-auth>=2.30
 markdown>=3.6
+anthropic>=0.97

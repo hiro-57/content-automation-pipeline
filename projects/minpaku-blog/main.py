@@ -1,14 +1,38 @@
 import os
+import re
 import sys
+import time
+from datetime import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-from steps.dify import generate_article
+from steps.claude import generate_article
 from steps.sheets import get_unprocessed_keyword, mark_processed
 from steps.wordpress import create_draft_post, split_title_from_markdown
 
 sys.stdout.reconfigure(encoding="utf-8")
-load_dotenv()
+# override=True: .env の値で OS の環境変数を上書きする
+# （空の ANTHROPIC_API_KEY などが OS 側にあっても .env 優先）
+load_dotenv(override=True)
+
+PROJECT_DIR = Path(__file__).resolve().parent
+OUTPUTS_DIR = PROJECT_DIR / "outputs"
+
+
+def _slug(text: str) -> str:
+    """ファイル名に使える形に整える（スペース→ハイフン、Windowsで使えない文字を除去）。"""
+    cleaned = re.sub(r'[\\/:*?"<>|]', "", text).strip()
+    return cleaned.replace(" ", "-")[:60]
+
+
+def _backup_article(keyword: str, article_md: str) -> Path:
+    """生成記事を outputs/ に保存。"""
+    OUTPUTS_DIR.mkdir(exist_ok=True)
+    now_str = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    path = OUTPUTS_DIR / f"{now_str}_{_slug(keyword)}.md"
+    path.write_text(article_md, encoding="utf-8")
+    return path
 
 
 def main() -> None:
@@ -23,12 +47,23 @@ def main() -> None:
     keyword = target["keyword"]
     row = target["row_number"]
     print(f"対象: 行 {row} / キーワード '{keyword}'")
-    print("Dify に記事生成をリクエスト中...")
 
+    print("Claude API に記事生成をリクエスト中...")
+    t0 = time.time()
     result = generate_article(keyword)
-    elapsed = result["elapsed_seconds"]
-    tokens = result["tokens"]
-    print(f"✓ 記事生成完了（{elapsed:.1f}秒 / {tokens:,}トークン）")
+    elapsed = time.time() - t0
+
+    in_tok = result["input_tokens"]
+    out_tok = result["output_tokens"]
+    cache_create = result["cache_creation_tokens"]
+    cache_read = result["cache_read_tokens"]
+    print(
+        f"✓ 記事生成完了（{elapsed:.1f}秒 / "
+        f"in={in_tok:,} out={out_tok:,} cache作成={cache_create:,} cache読込={cache_read:,}）"
+    )
+
+    backup_path = _backup_article(keyword, result["text"])
+    print(f"✓ バックアップ保存: outputs/{backup_path.name}")
 
     title, body = split_title_from_markdown(result["text"])
     if not title:
