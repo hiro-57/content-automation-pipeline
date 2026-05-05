@@ -1,9 +1,11 @@
 name: minpaku-blog daily pipeline
 
-# 毎日 JST 09:00（UTC 00:00）に自動実行 + 手動実行も可能
+# GitHub Secrets が未登録の間は cron を無効化（手動実行のみ）
+# Secrets 登録後、下の `schedule:` ブロックのコメントアウトを外せば毎日自動実行が始まる。
+# JST 09:00 = UTC 00:00 なので '0 0 * * *' で OK。
 on:
-  schedule:
-    - cron: '0 0 * * *'
+  # schedule:
+  #   - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       claude_model:
