@@ -195,17 +195,29 @@ strong {{
 
 
 def find_edge() -> Path:
+    """ヘッドレスブラウザを探す（Edge / Chromium / Chrome を順に試行）。"""
+    override = os.environ.get("BROWSER_PATH")
+    if override:
+        p = Path(override)
+        if p.exists():
+            return p
+
     candidates = [
         Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
         Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+        Path("/usr/bin/chromium-browser"),
+        Path("/usr/bin/chromium"),
+        Path("/usr/bin/google-chrome"),
+        Path("/usr/bin/google-chrome-stable"),
     ]
     for p in candidates:
         if p.exists():
             return p
-    found = shutil.which("msedge")
-    if found:
-        return Path(found)
-    raise SystemExit("Microsoft Edge が見つかりません。Edge をインストールしてください。")
+    for cmd in ("msedge", "chromium-browser", "chromium", "google-chrome"):
+        found = shutil.which(cmd)
+        if found:
+            return Path(found)
+    raise SystemExit("ヘッドレスブラウザが見つかりません。Edge / Chromium / Chrome のいずれかをインストールしてください。")
 
 
 def main() -> None:

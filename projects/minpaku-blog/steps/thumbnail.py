@@ -41,17 +41,51 @@ def _load_prompt(name: str) -> tuple[str, str]:
 
 
 def _find_edge() -> Path:
+    """ヘッドレスブラウザの実行可能ファイルを探す。
+
+    優先順位:
+      1. 環境変数 `BROWSER_PATH` で明示指定（CI 環境で使用）
+      2. Windows: Microsoft Edge の標準パス
+      3. Linux: Chromium / Chrome の標準パス（GitHub Actions 等の Ubuntu 環境）
+      4. PATH からの which() 検索
+
+    Edge と Chromium は `--headless=new --screenshot --window-size` の
+    フラグを共通でサポートするため、どちらでも render_thumbnail は動作する。
+    """
+    override = os.environ.get("BROWSER_PATH")
+    if override:
+        p = Path(override)
+        if p.exists():
+            return p
+        raise ThumbnailError(f"BROWSER_PATH が指定されていますが見つかりません: {override}")
+
     candidates = [
+        # Windows: Microsoft Edge
         Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
         Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+        # Linux: Chromium / Chrome（GitHub Actions Ubuntu ランナー想定）
+        Path("/usr/bin/chromium-browser"),
+        Path("/usr/bin/chromium"),
+        Path("/usr/bin/google-chrome"),
+        Path("/usr/bin/google-chrome-stable"),
+        # macOS: Chrome / Edge
+        Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
     ]
     for p in candidates:
         if p.exists():
             return p
-    found = shutil.which("msedge")
-    if found:
-        return Path(found)
-    raise ThumbnailError("Microsoft Edge が見つかりません")
+
+    # PATH からの検索
+    for cmd in ("msedge", "chromium-browser", "chromium", "google-chrome", "google-chrome-stable"):
+        found = shutil.which(cmd)
+        if found:
+            return Path(found)
+
+    raise ThumbnailError(
+        "ヘッドレスブラウザ（Edge/Chromium/Chrome）が見つかりません。"
+        " CI では `BROWSER_PATH` 環境変数で明示指定してください。"
+    )
 
 
 def _title_size_class(title: str) -> str:

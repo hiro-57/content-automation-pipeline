@@ -1,0 +1,68 @@
+name: minpaku-blog daily pipeline
+
+# 毎日 JST 09:00（UTC 00:00）に自動実行 + 手動実行も可能
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      claude_model:
+        description: 'Claude モデル ID（任意・デフォルト claude-sonnet-4-5）'
+        required: false
+        default: 'claude-sonnet-4-5'
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: projects/minpaku-blog
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: projects/minpaku-blog/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Chromium for thumbnail rendering
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends chromium-browser fonts-noto-cjk
+
+      - name: Restore Google service account credentials
+        env:
+          GOOGLE_CREDENTIALS_JSON_B64: ${{ secrets.GOOGLE_CREDENTIALS_JSON_B64 }}
+        run: |
+          echo "$GOOGLE_CREDENTIALS_JSON_B64" | base64 -d > google-credentials.json
+          # 簡易検証：JSON として読めるか
+          python -c "import json; json.load(open('google-credentials.json'))"
+
+      - name: Run pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+          KEYWORDS_SHEET_ID: ${{ secrets.KEYWORDS_SHEET_ID }}
+          WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          CLAUDE_MODEL: ${{ inputs.claude_model || 'claude-sonnet-4-5' }}
+          BROWSER_PATH: /usr/bin/chromium-browser
+          QUALITY_GATE_MIN_SCORE: '7.5'
+        run: python main.py
+
+      - name: Upload outputs as artifact
+        if: always()  # 失敗時もログ目的で残す
+        uses: actions/upload-artifact@v4
+        with:
+          name: outputs-${{ github.run_id }}
+          path: projects/minpaku-blog/outputs/
+          retention-days: 30
