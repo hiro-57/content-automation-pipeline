@@ -1,6 +1,6 @@
 ---
 name: codex-monthly-audit
-description: minpaku-blog パイプライン全体を OpenAI Codex CLI で監査し、評価レポートを `projects/minpaku-blog/outputs/audits/YYYY-MM.md` に保存するスキル。担当者が「月次監査」「Codex 監査」「コード健康診断」「プロジェクト全体レビュー」「定期監査」「audit」と発言した時、または「全体を別の AI でも見てほしい」「セカンドオピニオン欲しい」「コードに見落としないか確認したい」と言った時に**積極的に発動**する。Codex は Claude が書いたコードに対して GPT 視点で忌憚ない指摘を出すので、Claude 単独では見落としがちな盲点を炙り出せる。月 1 回程度の定例監査として運用することで、コード品質・運用リスク・ KB 充実度・目標達成度のドリフトを早期発見する。Make sure to use this skill whenever the user wants a comprehensive review of the pipeline by Codex — even if they don't say "monthly" explicitly. Treat single-file reviews and ad-hoc code questions as out-of-scope (those use other tools).
+description: minpaku-blog パイプライン全体を OpenAI Codex CLI で監査し、評価レポートを `projects/minpaku-blog/audits/YYYY-MM.md` に保存するスキル。担当者が「月次監査」「Codex 監査」「コード健康診断」「プロジェクト全体レビュー」「定期監査」「audit」と発言した時、または「全体を別の AI でも見てほしい」「セカンドオピニオン欲しい」「コードに見落としないか確認したい」と言った時に**積極的に発動**する。Codex は Claude が書いたコードに対して GPT 視点で忌憚ない指摘を出すので、Claude 単独では見落としがちな盲点を炙り出せる。月 1 回程度の定例監査として運用することで、コード品質・運用リスク・ KB 充実度・目標達成度のドリフトを早期発見する。Make sure to use this skill whenever the user wants a comprehensive review of the pipeline by Codex — even if they don't say "monthly" explicitly. Treat single-file reviews and ad-hoc code questions as out-of-scope (those use other tools).
 ---
 
 # Codex 月次監査スキル
@@ -31,18 +31,18 @@ Claude Code（私）が書いたコードに対して、私自身が客観的に
 
 1. `codex --version` で Codex CLI 利用可能か確認。エラーならユーザーに `npm install -g @openai/codex` を促して終了。
 2. 当月の年月（YYYY-MM 形式）を `date` 関連コマンドで取得。
-3. `projects/minpaku-blog/outputs/audits/` ディレクトリを `mkdir -p` で確保。
-4. 当月分のファイル `outputs/audits/{YYYY-MM}.md` が既に存在するか確認:
+3. `projects/minpaku-blog/audits/` ディレクトリを `mkdir -p` で確保。
+4. 当月分のファイル `audits/{YYYY-MM}.md` が既に存在するか確認:
    - 存在 → ユーザーに「今月分の監査は既に実行済みです（{path}）。再実行しますか？」と確認
    - 存在しない → そのまま進行
 
 ### Step 2 — 過去監査の収集（前月差分用）
 
-`projects/minpaku-blog/outputs/audits/` 内の既存 `.md` ファイルを最新 3 件まで取得。Codex への指示で「過去レポートと比較し、改善が反映されているか」を判定させる。
+`projects/minpaku-blog/audits/` 内の既存 `.md` ファイルを最新 3 件まで取得。Codex への指示で「過去レポートと比較し、改善が反映されているか」を判定させる。
 
 ### Step 3 — 監査プロンプト生成
 
-英語のプロンプトを `projects/minpaku-blog/outputs/audits/_audit_prompt_{YYYY-MM}.txt` に書き出す。日本語プロンプトは PowerShell 経由で文字化けするので**必ず英語**にする（教訓）。
+英語のプロンプトを `projects/minpaku-blog/outputs/_audit_prompt_{YYYY-MM}.txt` に書き出す（debug 用の一時ファイルなので outputs/ で OK・gitignore 対象）。日本語プロンプトは PowerShell 経由で文字化けするので**必ず英語**にする（教訓）。
 
 プロンプトテンプレート:
 
@@ -93,7 +93,7 @@ PowerShell から以下のパターンで実行（過去のセッションで判
 $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","User") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","Machine")
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 cd "C:\Users\hongj\OneDrive\ドキュメント\content-automation-pipeline\projects\minpaku-blog"
-Get-Content -Raw -Encoding UTF8 outputs\audits\_audit_prompt_{YYYY-MM}.txt | codex exec --sandbox read-only --color never --skip-git-repo-check 2>&1 | Out-File -FilePath outputs\audits\_audit_raw_{YYYY-MM}.txt -Encoding utf8
+Get-Content -Raw -Encoding UTF8 outputs\_audit_prompt_{YYYY-MM}.txt | codex exec --sandbox read-only --color never --skip-git-repo-check 2>&1 | Out-File -FilePath outputs\_audit_raw_{YYYY-MM}.txt -Encoding utf8
 ```
 
 重要ポイント:
@@ -117,7 +117,7 @@ Codex の生出力（`_audit_raw_{YYYY-MM}.txt`）には:
 抽出ルール:
 1. ファイル全体を読む
 2. 最初に出現する `## ` または `# ` から、`tokens used` または ファイル末尾までを抽出
-3. 抽出した内容を `outputs/audits/{YYYY-MM}.md` に保存
+3. 抽出した内容を `audits/{YYYY-MM}.md` に保存
 4. 元の生ファイル（`_audit_raw_*.txt`、`_audit_prompt_*.txt`）は debug 用に残す（次回上書きされる）
 
 ### Step 6 — サマリ提示 + 改善提案の確認
@@ -158,7 +158,7 @@ Codex の生出力（`_audit_raw_{YYYY-MM}.txt`）には:
 
 ## 出力例
 
-`outputs/audits/2026-05.md` の典型的構造:
+`audits/2026-05.md` の典型的構造:
 
 ```markdown
 ## 1. 技術選定
