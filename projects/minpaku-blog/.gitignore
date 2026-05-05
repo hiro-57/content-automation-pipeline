@@ -1,0 +1,33 @@
+# プロジェクト直下の安全装置
+# 親ディレクトリの .gitignore に依存せず、プロジェクト単独で安全な状態を保つ
+
+# 認証情報（絶対にコミットしない）
+.env
+.env.*
+!.env.example
+google-credentials.json
+*-service-account*.json
+
+# Python 仮想環境
+.venv/
+__pycache__/
+*.py[cod]
+
+# 自動生成される出力（記事・評価レポート・サムネ等）
+outputs/
+
+# Ahrefs CSV 投入箱（README は Git 管理対象）
+inbox/*.csv
+!inbox/README.md
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# ログ・一時ファイル
+*.log
+*.tmp
+tmp/

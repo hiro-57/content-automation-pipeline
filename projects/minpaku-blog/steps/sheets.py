@@ -77,3 +77,20 @@ def mark_processed(
     if "published_at" in headers:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ws.update_cell(row_number, _column_index(headers, "published_at"), now)
+
+
+def update_status(
+    spreadsheet_id: str,
+    row_number: int,
+    status: str,
+    *,
+    sheet_name: str | None = None,
+) -> None:
+    """指定行の status 列を任意の値に更新する。
+
+    品質ゲート等で「処理済」以外のステータス（例: 'needs_rewrite'）に
+    切り替える時に使用する。article_url や published_at は触らない。
+    """
+    ws = _open_worksheet(spreadsheet_id, sheet_name)
+    headers = ws.row_values(1)
+    ws.update_cell(row_number, _column_index(headers, "status"), status)

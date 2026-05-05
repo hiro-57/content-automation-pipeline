@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from steps.annotate import annotate_article
 from steps.claude import generate_article
 from steps.evaluate import evaluate_article, format_evaluation_markdown
-from steps.sheets import get_unprocessed_keyword, mark_processed
+from steps.sheets import get_unprocessed_keyword, mark_processed, update_status
 from steps.thumbnail import make_thumbnail
 from steps.wordpress import create_draft_post, split_title_from_markdown, upload_media
 
@@ -20,6 +20,10 @@ load_dotenv(override=True)
 
 PROJECT_DIR = Path(__file__).resolve().parent
 OUTPUTS_DIR = PROJECT_DIR / "outputs"
+
+# 品質ゲート: 評価の総合スコアがこの閾値未満なら WP 投稿せず needs_rewrite ステータスに
+QUALITY_GATE_MIN_SCORE = float(os.environ.get("QUALITY_GATE_MIN_SCORE", "7.5"))
+NEEDS_REWRITE_STATUS = "needs_rewrite"
 
 
 def _slug(text: str) -> str:
@@ -105,6 +109,23 @@ def main() -> None:
         eval_path = OUTPUTS_DIR / f"{base_name}.evaluation.md"
         _save(eval_path, eval_md)
         print(f"  評価レポート: outputs/{eval_path.name}")
+
+        # 品質ゲート: 総合スコアが閾値未満なら WP 投稿せず needs_rewrite で停止
+        # （評価自体に失敗した場合は except 節に行くので、このゲートは効かない＝従来動作維持）
+        overall_score = float(evaluation.get("overall_score") or 0)
+        if overall_score < QUALITY_GATE_MIN_SCORE:
+            update_status(sheet_id, row, NEEDS_REWRITE_STATUS)
+            print()
+            print("=" * 60)
+            print(
+                f"⚠ 品質ゲートで停止しました: 総合スコア {overall_score:.1f} が "
+                f"閾値 {QUALITY_GATE_MIN_SCORE:.1f} 未満です。"
+            )
+            print(f"  行 {row} → status: {NEEDS_REWRITE_STATUS}")
+            print(f"  記事と評価レポートは outputs/ に保存済み: {base_name}.md")
+            print("  サムネイル生成・WordPress 下書き投稿はスキップしました。")
+            print("  評価レポートを参考に、知識ベースを充実させて再生成を検討してください。")
+            return
     except Exception as exc:
         print(f"  ⚠ 評価に失敗しました（パイプラインは続行）: {exc}")
         eval_path = OUTPUTS_DIR / f"{base_name}.evaluation_error.txt"
